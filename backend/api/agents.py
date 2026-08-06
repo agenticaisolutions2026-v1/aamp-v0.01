@@ -1,9 +1,10 @@
 from fastapi import APIRouter
+from backend.schemas.agent import AgentResponse
 
 router = APIRouter()
 
 
-@router.get("/agents")
+@router.get("/agents", response_model=list[AgentResponse])
 def get_agents():
     return [
         {

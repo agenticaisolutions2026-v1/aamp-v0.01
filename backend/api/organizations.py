@@ -1,9 +1,10 @@
 from fastapi import APIRouter
+from backend.schemas.organization import OrganizationResponse
 
 router = APIRouter()
 
 
-@router.get("/organizations")
+@router.get("/organizations", response_model=list[OrganizationResponse])
 def get_organizations():
     return [
         {

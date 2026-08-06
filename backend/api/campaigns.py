@@ -1,9 +1,10 @@
 from fastapi import APIRouter
+from backend.schemas.campaign import CampaignResponse
 
 router = APIRouter()
 
 
-@router.get("/campaigns")
+@router.get("/campaigns", response_model=list[CampaignResponse])
 def get_campaigns():
     return [
         {
