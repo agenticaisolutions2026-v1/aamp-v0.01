@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 
+router = APIRouter(
+    prefix="/organizations",
+    tags=["Organizations"]
+)
 
-router = APIRouter()
-
-
-@router.get("/organizations")
-def get_organizations():
+@router.get("")
+async def get_organizations():
     return [
         {
             "id": 1,
