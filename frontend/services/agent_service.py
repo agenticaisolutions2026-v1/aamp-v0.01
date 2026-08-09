@@ -9,3 +9,13 @@ class AgentService:
     @staticmethod
     def create(payload: dict):
         return post("/agents", payload)
+
+    @staticmethod       # Naresh - Newly added
+    def execute(payload: dict):
+        return post("/agents/execute", payload)
+
+
+
+
+
+   

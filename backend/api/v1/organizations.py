@@ -1,4 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from backend.database.dependencies import get_db
+from backend.database.models import Organization
 
 router = APIRouter(
     prefix="/organizations",
@@ -6,21 +10,15 @@ router = APIRouter(
 )
 
 @router.get("")
-async def get_organizations():
+async def get_organizations(db: Session = Depends(get_db)):
+    organizations = db.query(Organization).all()
+
     return [
         {
-            "id": 1,
-            "name": "VNR VJIET",
-            "state": "Telangana"
-        },
-        {
-            "id": 2,
-            "name": "CBIT",
-            "state": "Telangana"
-        },
-        {
-            "id": 3,
-            "name": "KL University",
-            "state": "Andhra Pradesh"
+            "id": organization.id,
+            "name": organization.name,
+            "state": organization.state
         }
+        for organization in organizations
     ]
+
