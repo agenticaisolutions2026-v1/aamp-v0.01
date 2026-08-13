@@ -13,11 +13,11 @@ DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_NAME = os.getenv("POSTGRES_DB", "aamp_db")
 
-
-DATABASE_URL = (
-    f"postgresql+psycopg://"
-    f"{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+if not DB_PASSWORD:
+    raise ValueError("POSTGRES_PASSWORD is not set in the .env file")
 
 
-engine = create_engine(DATABASE_URL)
+DATABASE_URL = (f"postgresql+psycopg://" f"{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+
+
+engine = create_engine(DATABASE_URL,pool_pre_ping=True,)
