@@ -19,7 +19,18 @@ class SupervisorAgent:
         elif "crm" in query:
             agent = self.registry.get_agent("CRMAgent")
 
+        elif any(keyword in query for keyword in [
+            "college",
+            "colleges",
+            "university",
+            "universities",
+            "engineering"
+        ]):
+            agent = self.registry.get_agent("CollegeDiscoveryAgent")
+
         else:
             agent = self.registry.get_agent("LeadAgent")
+
+        state.selected_agent = agent.__class__.__name__
 
         return agent.execute(state)

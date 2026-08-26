@@ -215,3 +215,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Environment variables
+.env
+.env.*
+
+# Generated demo datasets
+college_enriched_test_5.json
+college_master_402.json
+complete_colleges.json
