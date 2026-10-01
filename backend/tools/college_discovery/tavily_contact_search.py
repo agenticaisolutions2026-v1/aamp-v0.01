@@ -1,3 +1,4 @@
+import re
 from backend.tools.college_discovery.tavily_search_client import (
     TavilySearchClient
 )
@@ -190,3 +191,70 @@ class TavilyContactSearch:
         )
 
         return raw.get("results", [])
+
+    # ====================================================
+    # NEW EXTENSION METHODS (FOR ROLE & MISSING EMAIL RECOVERY)
+    # ====================================================
+
+    def search_role_contact(
+        self,
+        college_name: str,
+        role: str,
+        official_domain: str
+    ):
+        """
+        Targeted multi-tier search to find role-specific contacts
+        (e.g., Placement Officer / TPO) and extract missing emails.
+        """
+        if not college_name or not role:
+            return []
+
+        # Tier 1: Target specific role on domain with email indicator '@'
+        query_1 = (
+            f'"{college_name}" "{role}" '
+            f'site:{official_domain} "@"'
+        )
+        raw_1 = self.client.search(query_1, max_results=5)
+        results_1 = raw_1.get("results", [])
+
+        if results_1:
+            return results_1
+
+        # Tier 2: Search for Placement / TPO page specifically
+        query_2 = (
+            f'"{college_name}" "placement" OR "TPO" '
+            f'site:{official_domain} email contact'
+        )
+        raw_2 = self.client.search(query_2, max_results=5)
+        return raw_2.get("results", [])
+
+    @staticmethod
+    def extract_email_from_text(text: str, target_domain: str = "") -> str:
+        """
+        Extracts email addresses from unstructured snippet text using regex.
+        Optionally prioritizes emails ending with the college domain.
+        """
+        if not text:
+            return ""
+
+        # Match standard email pattern
+        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+        matches = re.findall(email_pattern, text)
+
+        # Filter out common false positives from images/files
+        valid_emails = [
+            e.strip().lower() for e in matches
+            if not e.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg'))
+        ]
+
+        if not valid_emails:
+            return ""
+
+        # Prioritize college domain email if specified
+        if target_domain:
+            domain_clean = target_domain.lower().replace("www.", "")
+            for email in valid_emails:
+                if domain_clean in email:
+                    return email
+
+        return valid_emails[0]

@@ -2,37 +2,49 @@ import re
 
 from backend.agents.base_agent import BaseAgent
 from backend.agents.state import AgentState
-from backend.agents.college_enrichment_agent import CollegeEnrichmentAgent
-from backend.services.college_discovery_service import CollegeDiscoveryService
-from backend.services.college_demo_service import CollegeDemoService
+from backend.services.college_discovery_service import (
+    CollegeDiscoveryService,
+)
 
 
 class CollegeDiscoveryAgent(BaseAgent):
     """
-    Agent responsible for discovering colleges based on
-    the user's request.
+    Agent responsible for discovering colleges
+    based on the user's request.
+
+    The agent:
+        - parses the user query
+        - determines the requested count
+        - delegates discovery to CollegeDiscoveryService
+        - returns the discovered colleges
     """
 
     def __init__(self):
         self.service = CollegeDiscoveryService()
-        self.enrichment_agent = CollegeEnrichmentAgent()
-        self.demo_service = CollegeDemoService()
 
-    def execute(self, state):
+    def execute(
+        self,
+        state: AgentState,
+    ) -> AgentState:
 
         try:
+            state.status = "running"
+
             category, location = self._parse_query(
+                state.user_query
+            )
+
+            count = self._determine_count(
                 state.user_query
             )
 
             state.category = category
             state.location = location
 
-            # Today's demo:
-            # Use the 5 already-enriched college profiles.
-            colleges = (
-                self.demo_service
-                .get_enriched_colleges()
+            colleges = self.service.discover_colleges(
+                state=location,
+                category=category,
+                target_count=count,
             )
 
             state.result = {
@@ -46,38 +58,19 @@ class CollegeDiscoveryAgent(BaseAgent):
 
             return state
 
-        except Exception as e:
+        except Exception as exc:
 
-            state.error = str(e)
+            state.error = str(exc)
             state.status = "failed"
 
             return state
 
-            # enriched_colleges = []
-
-            #for college in colleges:
-
-                #enrichment_state = AgentState()
-
-                #enrichment_state.user_query = (state.user_query)
-                   
-                #enrichment_state.result = college
-
-                #enrichment_result = (
-                    #self.enrichment_agent.execute(
-                        #enrichment_state
-                   # )
-                #)
-
-                # enriched_colleges.append(
-                    #enrichment_result.result
-                #)
-
-
-
-    def _parse_query(self, query):
+    def _parse_query(
+        self,
+        query: str,
+    ):
         """
-        Parse category and state from a simple query.
+        Parse category and state from the user query.
 
         Example:
             engineering colleges in Andhra Pradesh
@@ -92,12 +85,13 @@ class CollegeDiscoveryAgent(BaseAgent):
         match = re.match(
             r"(.+?)\s+in\s+(.+)",
             query,
-            re.IGNORECASE
+            re.IGNORECASE,
         )
 
         if not match:
             raise ValueError(
-                "Query must follow the format: '<category> in <state>'"
+                "Query must follow the format: "
+                "'<category> in <state>'"
             )
 
         category = match.group(1).strip()
@@ -105,17 +99,24 @@ class CollegeDiscoveryAgent(BaseAgent):
 
         return category, location
 
-    def _determine_count(self, query):
+    def _determine_count(
+        self,
+        query: str,
+    ) -> int:
         """
-        Extract requested college count from the user query.
+        Extract requested college count.
 
-        If no number is specified, use 10 as the default target.
+        If no number is specified,
+        return 10 as the default.
         """
 
-        match = re.search(r"\b(\d+)\b", query)
+        match = re.search(
+            r"\b(\d+)\b",
+            query,
+        )
 
         if match:
             return int(match.group(1))
 
-        return 5
+        return 10
 

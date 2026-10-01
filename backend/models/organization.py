@@ -36,8 +36,3 @@ class Organization(Base):
         cascade="all, delete-orphan",
     )
 
-    campaigns = relationship(
-        "Campaign",
-        back_populates="organization",
-        cascade="all, delete-orphan",
-    )

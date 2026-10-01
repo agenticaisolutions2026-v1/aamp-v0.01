@@ -83,7 +83,14 @@ from sqlalchemy import engine_from_config, pool
 
 from backend.config.settings import DATABASE_URL
 from backend.database.base import Base
-from backend.models import Organization, Contact, Campaign, AgentRun
+
+from backend.models import (
+    Organization,
+    Contact,
+    Campaign,
+    AgentRun,
+    College,
+)
 
 
 config = context.config

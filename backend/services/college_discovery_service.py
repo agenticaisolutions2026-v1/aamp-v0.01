@@ -1,97 +1,139 @@
-from backend.tools.college_discovery.search_client import SearchClient
-from backend.tools.college_discovery.normalizer import Normalizer
-from backend.tools.college_discovery.deduplicator import Deduplicator
-from backend.tools.college_discovery.aggregator import Aggregator
 import logging
+
+from sqlalchemy import select
+
+from backend.database.session import SessionLocal
+from backend.models import College
+
 
 logger = logging.getLogger(__name__)
 
 
 class CollegeDiscoveryService:
     """
-    Service responsible for orchestrating college discovery.
+    Service responsible for retrieving colleges
+    from PostgreSQL.
 
-    Flow:
-        SearchClient → Normalizer → Deduplicator → Aggregator
+    Current architecture:
+
+        CollegeDiscoveryAgent
+                ↓
+        CollegeDiscoveryService
+                ↓
+            PostgreSQL
+
+    No external API calls are made here.
     """
 
     def __init__(self):
-        self.search_client = SearchClient()
-        self.normalizer = Normalizer()
-        self.deduplicator = Deduplicator()
-        self.aggregator = Aggregator()
+        pass
 
-        
     def discover_colleges(
         self,
         state: str,
         category: str,
-        target_count: int = 10
+        target_count: int = 10,
     ):
         """
-        Discover colleges using paginated SerpAPI results.
+        Retrieve colleges from PostgreSQL.
 
-        Keeps searching additional Google result pages until:
-            - target_count unique colleges are found, or
-            - no more useful results are available.
+        Args:
+            state:
+                State to search for.
+
+            category:
+                Requested college category.
+                Currently used for logging/context.
+
+            target_count:
+                Maximum number of colleges to return.
         """
 
-        query = f"{category} in {state}"
+        logger.info(
+            "Searching PostgreSQL for %s colleges in %s",
+            category,
+            state,
+        )
 
-        all_colleges = []
-        start = 0
+        with SessionLocal() as session:
 
-        # Safety limit so discovery doesn't search forever.
-        max_pages = 5
-
-        for _ in range(max_pages):
-
-            # Search current Google page
-            raw_results = self.search_client.search(
-                query,
-                start=start
+            statement = (
+                select(College)
+                .where(
+                    College.state.ilike(
+                        state.strip()
+                    )
+                )
+                .limit(target_count)
             )
 
-            if raw_results.get("error"):
-                break
-
-            # Normalize current page
-            normalized = self.normalizer.normalize(
-                raw_results
-            )
-
-            # Add current results
-            all_colleges.extend(
-                normalized
-            )
-
-            # Deduplicate everything collected so far
-            deduped = self.deduplicator.deduplicate(
-                all_colleges
+            colleges = (
+                session.execute(statement)
+                .scalars()
+                .all()
             )
 
             logger.info(
-                "Discovery progress: %s/%s colleges",
-                len(deduped),
-                target_count
+                "Found %s colleges in PostgreSQL",
+                len(colleges),
             )
 
-            # Target reached
-            if len(deduped) >= target_count:
-                break
+            return [
+                self._serialize_college(college)
+                for college in colleges
+            ]
 
-            # Move to next Google page
-            start += 10
+    @staticmethod
+    def _serialize_college(
+        college: College,
+    ) -> dict:
+        """
+        Convert SQLAlchemy College object
+        into a dictionary suitable for AgentState.
+        """
 
-        # Final deduplication
-        deduped = self.deduplicator.deduplicate(
-            all_colleges
-        )
+        return {
+            "id": college.id,
+            "name": college.name,
+            "website": college.website,
+            "state": college.state,
+            "city": college.city,
+            "address": college.address,
+            "phone": college.official_phone,
+            "email": college.official_email,  
+            "source_url": college.source_url,
+            "relevance_score": college.relevance_score,
+            "status": college.status,
 
-        selected = deduped[:target_count]
+            "departments": college.departments,
+            "programs": college.programs,
 
-        return self.aggregator.aggregate(
-            selected,
-            state=state,
-            category=category
-        )
+            "ai_ml_related": college.ai_ml_related,
+            "generative_ai_related": (
+                college.generative_ai_related
+            ),
+            "agentic_ai_related": (
+                college.agentic_ai_related
+            ),
+
+            "placement_page": (
+                college.placement_page
+            ),
+            "contact_page": (
+                college.contact_page
+            ),
+
+            "innovation": college.innovation,
+            "entrepreneurship": (
+                college.entrepreneurship
+            ),
+            "clubs_events": (
+                college.clubs_events
+            ),
+
+            "sources": college.sources,
+            "missing_fields": (
+                college.missing_fields
+            ),
+            "errors": college.errors,
+        }

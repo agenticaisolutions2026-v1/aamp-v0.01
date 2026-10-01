@@ -1,21 +1,23 @@
 import streamlit as st
-#from pages.organizations import show_organizations
+from pathlib import Path
 
-st.set_page_config(
-    page_title="AAMP",
-    layout="wide",
-    initial_sidebar_state="expanded"
+from components.common import init_page
+
+
+init_page("AAMP")
+
+st.write("Welcome to the Agentic AI Marketing Platform.")
+
+image_path = Path(__file__).parent / "assets" / "aamp_home.png"
+
+st.markdown(
+    '<div style="margin-top:-20px;">',
+    unsafe_allow_html=True,
 )
-st.markdown("""
-    <style>
-    [data-testid="stSidebarNav"] {
-        display:none;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-from components.sidebar import create_sidebar
-from components.header import create_header
-create_sidebar()
-create_header()
-#st.title("Agentic AI Marketing Platform")
-st.write("Welcome")
+
+st.image(
+    image_path,
+    use_container_width=True,
+)
+
+st.markdown("</div>", unsafe_allow_html=True)
