@@ -1,97 +1,210 @@
-from backend.tools.college_discovery.search_client import SearchClient
+import logging
+
+from backend.tools.college_discovery.tavily_search_client import (
+    TavilySearchClient,
+)
 from backend.tools.college_discovery.normalizer import Normalizer
 from backend.tools.college_discovery.deduplicator import Deduplicator
 from backend.tools.college_discovery.aggregator import Aggregator
-import logging
+
 
 logger = logging.getLogger(__name__)
 
 
 class CollegeDiscoveryService:
     """
-    Service responsible for orchestrating college discovery.
+    Service responsible for discovering engineering colleges.
 
     Flow:
-        SearchClient → Normalizer → Deduplicator → Aggregator
+
+        Multiple Tavily Searches
+                ↓
+        Normalizer
+                ↓
+        Deduplicator
+                ↓
+        Select up to 5 colleges
+                ↓
+        Aggregator
     """
 
     def __init__(self):
-        self.search_client = SearchClient()
+
+        self.search_client = TavilySearchClient()
         self.normalizer = Normalizer()
         self.deduplicator = Deduplicator()
         self.aggregator = Aggregator()
 
-        
     def discover_colleges(
         self,
         state: str,
         category: str,
-        target_count: int = 10
+        target_count: int = 5,
     ):
         """
-        Discover colleges using paginated SerpAPI results.
+        Discover colleges using multiple Tavily searches.
 
-        Keeps searching additional Google result pages until:
-            - target_count unique colleges are found, or
-            - no more useful results are available.
+        The initial task is limited to 5 colleges.
+
+        Multiple queries are used because a single Tavily
+        search may return list pages, government websites,
+        or other non-college results.
         """
 
-        query = f"{category} in {state}"
+        # -------------------------------------------------
+        # Safety limit
+        # -------------------------------------------------
 
-        all_colleges = []
-        start = 0
-
-        # Safety limit so discovery doesn't search forever.
-        max_pages = 5
-
-        for _ in range(max_pages):
-
-            # Search current Google page
-            raw_results = self.search_client.search(
-                query,
-                start=start
-            )
-
-            if raw_results.get("error"):
-                break
-
-            # Normalize current page
-            normalized = self.normalizer.normalize(
-                raw_results
-            )
-
-            # Add current results
-            all_colleges.extend(
-                normalized
-            )
-
-            # Deduplicate everything collected so far
-            deduped = self.deduplicator.deduplicate(
-                all_colleges
-            )
-
-            logger.info(
-                "Discovery progress: %s/%s colleges",
-                len(deduped),
-                target_count
-            )
-
-            # Target reached
-            if len(deduped) >= target_count:
-                break
-
-            # Move to next Google page
-            start += 10
-
-        # Final deduplication
-        deduped = self.deduplicator.deduplicate(
-            all_colleges
+        target_count = min(
+            target_count,
+            5,
         )
 
-        selected = deduped[:target_count]
+        # -------------------------------------------------
+        # Build multiple search queries
+        # -------------------------------------------------
+
+        search_queries = [
+            f"{category} in {state} official college website",
+
+            f"engineering colleges {state} official websites",
+
+            f"B.Tech colleges {state} official website",
+
+            f"engineering institute {state} official website",
+
+            f"engineering college Visakhapatnam {state} official",
+
+            f"engineering college Vijayawada {state} official",
+
+            f"engineering college Guntur {state} official",
+
+            f"engineering college Tirupati {state} official",
+
+            f"engineering college Kakinada {state} official",
+
+            f"engineering college Kurnool {state} official",
+
+            f"engineering college Nellore {state} official",
+        ]
+
+        all_colleges = []
+
+        # -------------------------------------------------
+        # Search each query
+        # -------------------------------------------------
+
+        for search_query in search_queries:
+
+            # Stop once enough colleges are found.
+            if len(all_colleges) >= target_count:
+                break
+
+            logger.info(
+                "Searching Tavily: %s",
+                search_query,
+            )
+
+            try:
+
+                raw_results = (
+                    self.search_client.search(
+                        query=search_query,
+                        max_results=10,
+                    )
+                )
+
+                # -------------------------------------------------
+                # Handle Tavily error
+                # -------------------------------------------------
+
+                if raw_results.get("error"):
+
+                    logger.warning(
+                        "Tavily search failed: %s",
+                        raw_results.get("error"),
+                    )
+
+                    continue
+
+                # -------------------------------------------------
+                # Normalize results
+                # -------------------------------------------------
+
+                normalized = (
+                    self.normalizer.normalize(
+                        raw_results
+                    )
+                )
+
+                logger.info(
+                    "Query produced %s normalized colleges",
+                    len(normalized),
+                )
+
+                # -------------------------------------------------
+                # Add results
+                # -------------------------------------------------
+
+                all_colleges.extend(
+                    normalized
+                )
+
+                # -------------------------------------------------
+                # Deduplicate
+                # -------------------------------------------------
+
+                all_colleges = (
+                    self.deduplicator.deduplicate(
+                        all_colleges
+                    )
+                )
+
+                logger.info(
+                    "Discovery progress: %s/%s colleges",
+                    len(all_colleges),
+                    target_count,
+                )
+
+            except Exception as exc:
+
+                logger.exception(
+                    "College discovery query failed: %s",
+                    exc,
+                )
+
+                continue
+
+        # -------------------------------------------------
+        # Final deduplication
+        # -------------------------------------------------
+
+        deduped = (
+            self.deduplicator.deduplicate(
+                all_colleges
+            )
+        )
+
+        # -------------------------------------------------
+        # Select only requested number
+        # -------------------------------------------------
+
+        selected = deduped[
+            :target_count
+        ]
+
+        logger.info(
+            "Final college discovery result: %s/%s",
+            len(selected),
+            target_count,
+        )
+
+        # -------------------------------------------------
+        # Return structured result
+        # -------------------------------------------------
 
         return self.aggregator.aggregate(
             selected,
             state=state,
-            category=category
+            category=category,
         )

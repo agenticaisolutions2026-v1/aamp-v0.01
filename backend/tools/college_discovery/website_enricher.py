@@ -88,8 +88,8 @@ class WebsiteEnricher:
         ],
     }
 
-    # We do NOT automatically search every missing category.
-    # These are the most important fallback groups.
+    # These fallback groups are used only when
+    # important categories are missing.
     FALLBACK_GROUPS = [
         (
             "academic",
@@ -110,9 +110,13 @@ class WebsiteEnricher:
                 "contact",
             ],
             (
-                "contact address phone email "
-                "placement training placement cell "
-                "training and placement"
+                "contact email official email "
+                "address phone "
+                "placement placement-cell "
+                "training placement "
+                "training and placement "
+                "career tpo "
+                "training placement officer"
             ),
         ),
         (
@@ -263,7 +267,10 @@ class WebsiteEnricher:
             if not url:
                 continue
 
-            # Reject third-party domains.
+            # -------------------------------------------------
+            # Only accept official college-domain pages.
+            # -------------------------------------------------
+
             if not self._is_official_domain(
                 url,
                 official_domain,
@@ -326,6 +333,10 @@ class WebsiteEnricher:
             pages.get(category)
             for category in categories
         )
+
+    # ---------------------------------------------------------
+    # Query builders
+    # ---------------------------------------------------------
 
     def _build_broad_query(
         self,
@@ -469,7 +480,7 @@ class WebsiteEnricher:
 
             # If at least one important category
             # in this group already has useful pages,
-            # do NOT spend another Tavily call.
+            # do not spend another Tavily call.
             if self._has_any_category(
                 pages,
                 categories,

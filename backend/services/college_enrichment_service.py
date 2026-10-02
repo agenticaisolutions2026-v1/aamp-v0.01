@@ -147,7 +147,6 @@ class CollegeEnrichmentService:
         "odisha",
     ]
 
-
     def _normalize_program(
         self,
         program: str,
@@ -294,14 +293,39 @@ class CollegeEnrichmentService:
         self,
         pages: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        """
+        Find the most useful official college email.
 
-        # Prefer contact / placement pages because
-        # they are more likely to contain institutional
-        # contact addresses.
-        for page in pages:
+        Priority:
+            1. Placement / TPO / training emails
+            2. Contact / admissions emails
+            3. General institutional emails
+            4. Any remaining email
+
+        The email must come from the already researched
+        official college website pages.
+        """
+
+        candidates = []
+
+        # -----------------------------------------------------
+        # Collect email candidates
+        # -----------------------------------------------------
+
+        for page_index, page in enumerate(pages):
 
             content = (
                 page.get("content")
+                or ""
+            )
+
+            title = (
+                page.get("title")
+                or ""
+            )
+
+            url = (
+                page.get("url")
                 or ""
             )
 
@@ -309,16 +333,240 @@ class CollegeEnrichmentService:
                 content
             )
 
-            if matches:
+            for email in matches:
 
-                return self._field(
-                    matches[0],
-                    page.get("url"),
+                email = (
+                    email
+                    .strip()
+                    .lower()
                 )
 
+                if not email:
+                    continue
+
+                candidates.append(
+                    {
+                        "email": email,
+                        "url": url,
+                        "title": title,
+                        "content": content,
+                        "page_index": page_index,
+                    }
+                )
+
+        # No email found
+        if not candidates:
+
+            return self._field(
+                None,
+                None,
+            )
+
+        # -----------------------------------------------------
+        # Remove duplicate emails
+        # -----------------------------------------------------
+
+        unique_candidates = []
+        seen = set()
+
+        for candidate in candidates:
+
+            email = candidate["email"]
+
+            if email in seen:
+                continue
+
+            seen.add(email)
+
+            unique_candidates.append(
+                candidate
+            )
+
+        candidates = unique_candidates
+
+        # -----------------------------------------------------
+        # Score email candidates
+        # -----------------------------------------------------
+
+        def email_score(
+            candidate: dict[str, Any],
+        ) -> int:
+
+            email = candidate["email"]
+
+            title = (
+                candidate["title"]
+                or ""
+            ).lower()
+
+            content = (
+                candidate["content"]
+                or ""
+            ).lower()
+
+            url = (
+                candidate["url"]
+                or ""
+            ).lower()
+
+            score = 0
+
+            # -------------------------------------------------
+            # Placement / TPO indicators
+            # -------------------------------------------------
+
+            placement_keywords = [
+                "placement",
+                "placements",
+                "training and placement",
+                "training & placement",
+                "tpo",
+                "career",
+                "placement officer",
+                "training placement officer",
+            ]
+
+            for keyword in placement_keywords:
+
+                if keyword in title:
+                    score += 100
+
+                if keyword in url:
+                    score += 80
+
+                if keyword in content:
+                    score += 40
+
+            # -------------------------------------------------
+            # Contact indicators
+            # -------------------------------------------------
+
+            contact_keywords = [
+                "contact",
+                "contact us",
+                "reach us",
+                "admission",
+                "admissions",
+                "principal",
+                "dean",
+                "hod",
+                "head of department",
+            ]
+
+            for keyword in contact_keywords:
+
+                if keyword in title:
+                    score += 60
+
+                if keyword in url:
+                    score += 50
+
+                if keyword in content:
+                    score += 20
+
+            # -------------------------------------------------
+            # Email-name indicators
+            # -------------------------------------------------
+
+            email_keywords = [
+                "placement",
+                "tpo",
+                "career",
+                "training",
+                "admission",
+                "principal",
+                "dean",
+                "hod",
+                "office",
+                "info",
+                "contact",
+                "admin",
+            ]
+
+            for keyword in email_keywords:
+
+                if keyword in email:
+                    score += 30
+
+            # -------------------------------------------------
+            # Institutional domain indicators
+            # -------------------------------------------------
+
+            _, _, domain = email.partition("@")
+
+            if domain:
+
+                if domain.endswith(
+                    ".edu.in"
+                ):
+                    score += 30
+
+                elif domain.endswith(
+                    ".ac.in"
+                ):
+                    score += 30
+
+                elif domain.endswith(
+                    ".edu"
+                ):
+                    score += 25
+
+                elif domain.endswith(
+                    ".org"
+                ):
+                    score += 10
+
+            # -------------------------------------------------
+            # Reject system / unusable emails
+            # -------------------------------------------------
+
+            unwanted_keywords = [
+                "noreply",
+                "no-reply",
+                "donotreply",
+                "do-not-reply",
+                "mailer-daemon",
+                "webmaster",
+                "wordpress",
+                "test",
+                "example",
+            ]
+
+            for keyword in unwanted_keywords:
+
+                if keyword in email:
+                    score -= 100
+
+            # -------------------------------------------------
+            # Prefer earlier pages when scores are similar
+            # -------------------------------------------------
+
+            score += max(
+                0,
+                20 - candidate["page_index"],
+            )
+
+            return score
+
+        # -----------------------------------------------------
+        # Select highest-quality email
+        # -----------------------------------------------------
+
+        candidates.sort(
+            key=email_score,
+            reverse=True,
+        )
+
+        selected = candidates[0]
+
+        logger.info(
+            "Selected official email: %s",
+            selected["email"],
+        )
+
         return self._field(
-            None,
-            None,
+            selected["email"],
+            selected["url"],
         )
 
     # ---------------------------------------------------------
@@ -376,7 +624,7 @@ class CollegeEnrichmentService:
         - it contains the expected college location when available
         - it looks like a physical address
         - unrelated text such as email/social-media content
-            is rejected
+          is rejected
         """
 
         address_labels = [
@@ -389,7 +637,6 @@ class CollegeEnrichmentService:
             "located at:",
         ]
 
-        # The enrichment input gives us the expected location.
         expected_city = (
             str(
                 getattr(
@@ -491,8 +738,7 @@ class CollegeEnrichmentService:
                     if len(candidate) < 15:
                         continue
 
-                    # If we know the expected city/state,
-                    # require at least one to appear.
+                    # Require expected city/state if available.
                     if expected_city or expected_state:
 
                         location_match = (
@@ -508,9 +754,6 @@ class CollegeEnrichmentService:
                         if not location_match:
                             continue
 
-                    # A physical address normally contains
-                    # some combination of numbers, locality,
-                    # road, district, PIN etc.
                     has_number = bool(
                         re.search(
                             r"\d",
@@ -588,7 +831,6 @@ class CollegeEnrichmentService:
                         )
                     )
 
-        # Deduplicate by department name.
         result = []
         seen = set()
 
@@ -831,8 +1073,8 @@ class CollegeEnrichmentService:
             )
         )
 
-        # For contacts, prefer contact pages,
-        # then placement pages, then other official pages.
+        # Contact pages first, then placement pages,
+        # then other official pages.
         contact_priority_pages = (
             contact_pages
             + placement_pages
@@ -847,8 +1089,6 @@ class CollegeEnrichmentService:
             contact_priority_pages
         )
 
-        # Address must come ONLY from official
-        # Tavily-returned website content.
         address = self._find_address(
             contact_priority_pages
         )
@@ -1020,9 +1260,6 @@ class CollegeEnrichmentService:
                 website,
             ),
 
-            # Discovery information is preserved,
-            # but not falsely presented as official
-            # website evidence.
             "state": self._field(
                 college.get("state"),
                 None,
